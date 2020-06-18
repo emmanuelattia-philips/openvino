@@ -48,6 +48,68 @@ private:
         }
     }
 
+    static const char  kPathSeparator = '\\';
+
+    static const char* FindLastPathSeparatorA(LPCSTR path) {
+        const char* const last_sep = strchr(path, kPathSeparator);
+        return last_sep;
+    }
+    std::basic_string<CHAR> GetDirnameA(LPCSTR path) {
+        auto pos = FindLastPathSeparatorA(path);
+        if (pos == nullptr) {
+            return path;
+        }
+        std::basic_string<CHAR> original(path);
+        return original.substr(0, std::distance(path, pos));
+    }
+    std::basic_string<CHAR> IncludePluginDirectoryA(LPCSTR path) {
+        std::vector<CHAR> lpBuffer;
+        DWORD nBufferLength;
+
+        nBufferLength = GetDllDirectoryW(0, nullptr);
+        lpBuffer.resize(nBufferLength);
+        GetDllDirectoryA(nBufferLength, &lpBuffer.front());
+
+        auto dirname = GetDirnameA(path);
+        if (!dirname.empty()) {
+            SetDllDirectoryA(dirname.c_str());
+        }
+
+        return &lpBuffer.front();
+    }
+#ifdef ENABLE_UNICODE_PATH_SUPPORT
+    static const wchar_t* FindLastPathSeparatorW(LPCWSTR path) {
+        const wchar_t* const last_sep = wcsrchr(path, kPathSeparator);
+        return last_sep;
+    }
+
+    std::basic_string<WCHAR> GetDirnameW(LPCWSTR path) {
+        auto pos = FindLastPathSeparatorW(path);
+        if (pos == nullptr) {
+            return path;
+        }
+        std::basic_string<WCHAR> original(path);
+        return original.substr(0, std::distance(path, pos));
+    }
+
+    std::basic_string<WCHAR> IncludePluginDirectoryW(LPCWSTR path) {
+        std::vector<WCHAR> lpBuffer;
+        DWORD nBufferLength;
+
+        nBufferLength = GetDllDirectoryW(0, nullptr);
+        lpBuffer.resize(nBufferLength);
+        GetDllDirectoryW(nBufferLength, &lpBuffer.front());
+
+        auto dirname = GetDirnameW(path);
+        if (!dirname.empty()) {
+            SetDllDirectoryW(dirname.c_str());
+        }
+
+        return &lpBuffer.front();
+    }
+#endif
+
+
 public:
     /**
      * @brief A shared pointer to SharedObjectLoader
@@ -62,8 +124,11 @@ public:
      */
     explicit SharedObjectLoader(LPCWSTR pluginName) {
         ExcludeCurrentDirectory();
+        auto oldDir = IncludePluginDirectoryW(pluginName);
 
         shared_object = LoadLibraryW(pluginName);
+
+        SetDllDirectoryW(oldDir.c_str());
         if (!shared_object) {
             char cwd[1024];
             THROW_IE_EXCEPTION << "Cannot load library '" << details::wStringtoMBCSstringChar(std::wstring(pluginName)) << "': " << GetLastError()
@@ -74,8 +139,11 @@ public:
 
     explicit SharedObjectLoader(LPCSTR pluginName) {
         ExcludeCurrentDirectory();
+        auto oldDir = IncludePluginDirectoryA(pluginName);
 
         shared_object = LoadLibraryA(pluginName);
+
+        SetDllDirectoryA(oldDir.c_str());
         if (!shared_object) {
             char cwd[1024];
             THROW_IE_EXCEPTION << "Cannot load library '" << pluginName << "': " << GetLastError()
